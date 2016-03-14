@@ -1,0 +1,79 @@
+8
+
+dir
+34
+https://rdmpage@bioguid.googlecode.com/svn/trunk/www/Net/DNS
+https://rdmpage@bioguid.googlecode.com/svn
+
+
+
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
+
+svn:special svn:externals svn:needs-lock
+
+RR
+dir
+
+Resolver.php
+file
+
+
+
+
+2009-04-08T20:14:49.000000Z
+b211f8af6a2623433fac1ad97ecd68a0
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
+RR.php
+file
+
+
+
+
+2009-04-08T20:14:53.000000Z
+6ca4e79345c8b9b2c9b1694a823e8bc9
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
+Packet.php
+file
+
+
+
+
+2009-04-08T20:14:47.000000Z
+981b4701bef1c06a9dd6199b35f1bd3c
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
+Question.php
+file
+
+
+
+
+2009-04-08T20:14:47.000000Z
+41d202cf2e87c6f396c0573ab23646d3
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
+Header.php
+file
+
+
+
+
+2009-04-08T20:14:46.000000Z
+555e68de0fecd928e5057b043306fe25
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+

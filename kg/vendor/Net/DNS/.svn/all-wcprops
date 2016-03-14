@@ -1,0 +1,35 @@
+K 25
+svn:wc:ra_dav:version-url
+V 34
+/svn/!svn/ver/34/trunk/www/Net/DNS
+END
+Resolver.php
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/!svn/ver/34/trunk/www/Net/DNS/Resolver.php
+END
+RR.php
+K 25
+svn:wc:ra_dav:version-url
+V 41
+/svn/!svn/ver/34/trunk/www/Net/DNS/RR.php
+END
+Packet.php
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/!svn/ver/34/trunk/www/Net/DNS/Packet.php
+END
+Question.php
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/!svn/ver/34/trunk/www/Net/DNS/Question.php
+END
+Header.php
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/!svn/ver/34/trunk/www/Net/DNS/Header.php
+END

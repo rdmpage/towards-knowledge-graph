@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  	<meta charset="utf-8" /> 
+  	<title>Towards a biodiversity knowledge graph</title>
+	<link rel="stylesheet" href="font-awesome-4.5.0/css/font-awesome.min.css">  	
+    <style type="text/css">
+      body { 
+      	margin: 40px; 
+      	font-family:sans-serif;
+      	line-height:1.5em;	
+      }
+      input[type="text"] {
+    		font-size:14px;
+	  }
+	  button {font-size:14px;}
+	  
+	  .todo {
+	  	background-color:pink;
+	  	color:white;
+	  }
+	  
+	  .recommendation {
+	  	background-color:#FC6;
+	  	border:1px solid rgb(248,248,248);
+	  	padding:10px;
+	  }
+	  
+	  .definition {
+	  	float:right;
+	  	width:180px;
+	  	font-size:0.8em;
+	  	background-color:#6F6;
+	  	border:1px solid rgb(248,248,248);
+	  	padding:10px;
+	  	margin-left:10px;
+	  }
+	  	
+	  
+	  
+	  .result {
+	  	border:1px solid rgb(192,192,192);
+	  	padding:10px;
+	  	line-height:1em;
+	  	color:#804000;
+	  	/* font-size:10px; */
+	  	/*background-color:#EEEEEE;*/
+	  }
+	  
+	  .tag {
+	  	background:#CF6;
+	  	border:1px solid #FC6;
+	  	padding:2px;
+	  	display:inline;
+	  }
+	  	
+	  
+    </style>
+    <!-- jquery -->
+    <script src="jquery-1.11.2.min.js"></script>
+    
+    <script src="js/jsonld.js"></script>
+    
+    <script src="js/viz.js"></script>
+
+    
+    <script>
+    
+        //--------------------------------------------------------------------------------
+		function crossref_reconcile() {
+			$('#crossref_reconcile_result').html('<i class="fa fa-refresh fa-spin"></i>');	
+			
+			var text = $('#crossref_reconcile_query').val();
+			
+			var query = {};
+			query.q0 = {};
+			query.q0.query = text;
+			query.q0.limit = 3;
+			
+			$.getJSON('kg/reconcile/reconciliation_crossref.php?queries=' + JSON.stringify(query) + "&callback=?",
+				function(data){
+					// http://stackoverflow.com/a/3515761
+					var html = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+
+					$('#crossref_reconcile_result').html(html);	
+				 }
+				
+				);		
+		}			
+    
+    
+        //--------------------------------------------------------------------------------
+		function wikidata_reconcile() {
+			$('#wikidata_reconcile_result').html('<i class="fa fa-refresh fa-spin"></i>');
+			var query = $('#wikidata_reconcile_query').val();
+			$.getJSON('https://tools.wmflabs.org/wikidata-reconcile/?query=' + query + "&callback=?",
+				function(data){
+					// http://stackoverflow.com/a/3515761
+					var html = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+
+					$('#wikidata_reconcile_result').html(html);	
+				 }
+				
+				);		
+		}		
+		
+		
+		
+        //--------------------------------------------------------------------------------	
+		function show_wrapper(sel) {
+			$('#wrapper_result').html('<i class="fa fa-refresh fa-spin"></i>');
+			$.getJSON('kg/www/resolve.php?id=' + sel.value + "&callback=?",
+				function(data){
+					// http://stackoverflow.com/a/3515761
+					var html = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+
+					$('#wrapper_result').html(html);	
+					}	
+				);
+			
+		}
+			
+     </script>
+  	
+  	
+  </head>
+<body>
+<h1>Towards a biodiversity knowledge graph</h1>
+
+<p class="recommendation">TL;DR; In order to build a usable biodiversity knowledge graph we should adopt JSON-LD for biodiversity data, develop reconciliation services to match entities to identifiers, and a use a mixture of document and graph databases to store and query the data. To bootstrap this project we can create wrappers around each biodiversity data provider, and a central cache that is both a document store and a simple graph database. This power of this approach should be showcased by applications that use the central cache to tackle specific problems, such as augmenting existing data.</p>
+
+
+<h2>Contents</h2>
+<ul>
+<li><a href="#jsonld">JSON-LD</a></li>
+<li><a href="#vocabularies">Vocabularies</a></li>
+<li><a href="#identifiers">Identifiers</a></li>
+<li><a href="#glue">Cross linking datasets ("glue")</a></li>
+<li><a href="#reconciliation">Reconciliation services (from strings to things)</a></li>
+<li><a href="#knowledge graph">The knowledge graph</a></li>
+<li><a href="#implementation">Implementation</a></li>
+<li><a href="#applications">Applications</a></li>
+
+</ul>
+
+<hr />
+<h2><a name="background" />Background</h2>
+<div class="tag">linked data</div>
+<div class="tag">semantic web</div>
+<div class="tag">what went wrong</div>
+<div class="tag">knowledge graph</div>
+
+<p>
+One way to think about "core" biodiversity data is as a network of connected entities, such as taxa, taxonomic names, publications, people, species, sequences, images, collections, etc.</p>
+
+<p> 
+<img src="images/fig-1-full.png" width="400px"/>
+</p>
+<p>
+Many tasks in biodiversity informatics correspond to tracing paths in this "knowledge graph". For example, someone wanting to do a phylogeographic analysis might want to go from a molecular phylogeny to the sequences used to build that tree, to the voucher specimens for those sequences, and then to the collecting localities in order to be able to place each tip of the tree on a map. This document sketches out some of the problems in building the <strong>biodiversity knowledge graph</strong>.
+</p>
+
+<p>Traditional semantic web approaches emphasise everything having a unique HTTP URI identifier that can be resolved to yield data in RDF. That RDF would be rendered in XML, be stored in a triple store, and queried using SPARQL. The RDF might employ ontologies that support reasoning. Each of these components can be difficult (or, at least, time consuming) to implement individually, taken together is has so far proved to be a bridge too far for the biodiversity informatics community. We have had RDF being served for a decade now (principally by taxonomic name databases) and yet we are no nearer to having a knowledge graph, or beng able to answer interesting questions using the data we are mobilising using RDF.</p>
+
+<p>In this document I argue that we can create a knowledge graph by cutting several Gordian knots. Instead of RDF as XML we can use JSON-LD, which is much more human-friendly (and, after all, developers are people too). Instead of ontologies and inference we use controlled vocabularies, and wherever possible use ones that have wider use than just in our field (for example, <a href="http://schema.org">schema.org</a>). Lastly, we make use of <a href="https://en.wikipedia.org/wiki/NoSQL">NoSQL</a> databases such as document stores (e.g., CouchDB), and graph databases (e.g., Neo4J), coupled with full text search (e.g., Elastic Search) to create a knowledge graph. As an example of the power of this more flexible aproach, see <a href="http://dx.doi.org/10.1007/978-3-319-25010-6_12">Building and Using a Knowledge Graph to Combat Human Trafficking</a>.</p>
+
+
+<hr />
+<h2><a name="jsonld" />JSON-LD</h2>
+<div class="tag">rdf</div>
+<div class="tag">json-ld</div>
+<div class="definition">JSON-LD is a lightweight Linked Data format. It is easy for humans to read and write (see <a href="http://json-ld.org">http://json-ld.org</a>)</div>
+<p>JSON has become the lingua franca of data. It's a simple way to represent data that works well with client-side code in web browsers. Here is an example:</p>
+<div class="result" id="json"></div>
+
+<p>This simple key-value format will be familiar to anyone writing programs that consume web services (such as those provided by GBIF), and JSON has become so ubiquitous that there are databases using JSON as their data format (e.g., CouchDB). One limitation, however, is that it lacks any information on the semantics of the keys. For example, if we have JSON from two different sources, and both use the key "name" how do we know that they mean the same thing? RDF solves this problem by using vocabularies with terms defined by URIs. Typically this comes at the cost of readability, but JSON-LD minimises this by having all the definitions in the <b>context</b>. The JSON-LD below is based on the JSON above, but we've added @context to define the terms, and @id to provide a unique identifier.
+
+<div class="result" id="jsonld1"></div>
+
+<p>The JSON-LD shown above can be rendered in another RDF format, such as nquads:</p>
+<div class="result" id="jsonld2"></div>
+
+<p>Hence we can move between a typical JSON document that we can use in a web interface, or as input into a JSON document store, and a classical triplet format.</p>
+
+<script>
+
+var simple = {
+   "image": "http://www.gravatar.com/avatar/05d65783bec75fac4519ff111a69ba8c",
+  "name": "Roderic D. M. Page",
+  "homepage": "http://iphylo.blogspot.com"
+};
+
+$('#json').html('<pre>' + JSON.stringify(simple, null, 2) + '</pre>');
+
+// https://css-tricks.com/snippets/javascript/htmlentities-for-javascript/
+function htmlEntities(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+var doc = {
+"@id": "http://orcid.org/0000-0002-7101-9767",
+  "http://schema.org/name": "Roderic D. M. Page",
+  "http://schema.org/url": {"@id": "http://iphylo.blogspot.com"},
+  "http://schema.org/image": {"@id": "http://www.gravatar.com/avatar/05d65783bec75fac4519ff111a69ba8c"}
+};
+var context = {
+  "name": "http://schema.org/name",
+  "homepage": {"@id": "http://schema.org/url", "@type": "@id"},
+  "image": {"@id": "http://schema.org/image", "@type": "@id"},
+  "ORCID": "http://orcid.org/"
+};
+jsonld.compact(doc, context, function(err, compacted) {
+  $('#jsonld1').html('<pre>' + JSON.stringify(compacted, null, 2) + '</pre>');
+  });
+  
+ // serialize a document to N-Quads (RDF)
+jsonld.toRDF(doc, {format: 'application/nquads'}, function(err, nquads) {
+  // nquads is a string of nquads
+  $('#jsonld2').html('<pre>' + htmlEntities(nquads) + '</pre>');
+}); 
+</script>
+
+
+
+
+<hr />
+<h2><a name="vocabularies" />Vocabularies</h2>
+<div class="tag">vocabularies</div>
+<div class="tag">darwin core</div>
+<div class="tag">schema.org</div>
+<p class="recommendation">Existing vocabularies with broad acceptance outside biodiversity should be used as much as possible, such as schema.org.</p>
+
+<p>There are numerous controlled vocabularies and ontologies for entities of interest to a given domain or field of study. At the same time, major search engines are promoting <a href="http://schema.org">schema.org</a> as a standard vocabulary for marking up web pages. It makes sense to use this for at least two reasons. The first is that it covers many entities such as people, museums, and organisations that are often not included in domain specific vocabularies. Secondly, there is a strong incentive to include structured makeup in web pages in order to improve discoverability by search engines, so that efforts to provide JSON-LD using schema.org can be part of a larger goal of increasing the visibility of a given institution's web site.</p>
+
+<p>In biodiversity informatics the best known vocabulary is Darwin Core (<a href="http://rs.tdwg.org/dwc/terms/">http://rs.tdwg.org/dwc/terms/</a>) (see also   
+<a href="http://dx.doi.org/10.1371/journal.pone.0029715">Darwin Core: An Evolving Community-Developed Biodiversity Data Standard</a>) which provides an extensive set of terms for occurrence data. The <a href="http://rs.tdwg.org/dwc/terms/guides/rdf/">Darwin Core RDF Guide</a> adds a further set of terms based on the distinction between terms that have literal values (such as numbers and strings) and those that refer to other objects. In the context of the knowledge graph this seems to add more complexity than is necessary, especially if we want to keep occurrence JSON-LD as close to the JSON returned by the GBIF web services as possible.</p>
+
+<p>In the same spirit of keeping things simple, there is a tendency to retain some information about namespaces for each key in the form of a prefix. For example, in the document below the title key is of the form "dc:title" where the "dc:" prefix refers to the Dublin Core namespace "http://purl.org/dc/terms/". This adds unnecessary complexity (why do we need to know that it's a "dc" title?).  </p>
+
+<div class="result" id="vocab1"></div>
+
+The next document shows the key "title" without any namespace prefix.
+<div class="result" id="vocab2"></div>
+
+<script>
+
+var doc1 = {
+  "http://purl.org/dc/terms/title": "Darwin Core: An Evolving Community-Developed Biodiversity Data Standard"
+};
+var context1 = {
+  "dc:title": "http://purl.org/dc/terms/title"
+};
+jsonld.compact(doc1, context1, function(err, compacted) {
+  $('#vocab1').html('<pre>' + JSON.stringify(compacted, null, 2) + '</pre>');
+  });
+  
+var context2 = {
+  "title": "http://purl.org/dc/terms/title"
+};  
+  
+jsonld.compact(doc1, context2, function(err, compacted) {
+  $('#vocab2').html('<pre>' + JSON.stringify(compacted, null, 2) + '</pre>');
+  });  
+  
+ </script>
+
+
+
+
+<hr />
+<h2><a name="identifiers" />Identifiers</h2>
+<div class="tag">identifiers</div>
+<div class="tag">curie</div>
+<div class="tag">doi</div>
+<div class="tag">lsid</div>
+<div class="definition">A CURIE is a bipartite identifier of the form Prefix:LocalID, in which the prefix is a convenient abbreviation of a URI prefix. </div>
+<p class="recommendation">Within JSON-LD identifiers should be represented as CURIEs following existing practice in bioinformatics. CURIEs specific for biodiversity informatics sources should be created. Wherever possible URIs for identifiers  should use <a href="http://identifiers.org">identifiers.org</a>.</p>
+
+<p>Once we think in terms of a graph then it is crucial that we can unambiguously identify the vertices in the graph. Each connection ("edge") in the graph is simply a pair of vertices. Furthermore, if we have globally recognised identifiers for the vertices we can distribute the problem of building the graph across numerous, independent sources. If we all agree that, say, a paper's unique identify is a DOI, then we can independently connect that paper to other papers (the citation graph), to authors, to specimens, to cited sequences, etc. Hence we can only make the task decentralised if we have global identifiers.</p>
+
+<p>Few topics have caused as much grief in biodiversity informatics as identifiers. Arguments about which technology to use (e.g., HTTP URIs versus LSIDs versus DOIs), difficulties agreeing on what gets an identifier, and a lack of obvious immediate value from assigning identifiers have all contributed to this situation. There has also been a degree of wishful thinking regarding the benefits of identifiers. <strong>Identifiers only have value in the context of tools and services that use them, simply minting identifiers and hoping value will emerge spontaneously is, at best, naive.</strong> For example, the academic publishing industry has settled on DOIs to identify publications. The value that people get from these identifiers, such as consistent resolution, easy access to metadata, automatically formatted citations for articles, citation counts, easy discovery of articles, and altmetrics, all require an underlying infrastructure, without which the DOI itself is of little use.</p>
+
+<p>Identifiers as URIs are not particularly stable as the mechanism of resolution can be subject to change. For example, the DOIs were originally recommend to be displayed in the form doi:&lt;doi&gt;, such as doi:10.1007/978-3-319-25010-6_12, but subsequently CrossRef recommended using the HTTP prefix http://dx.doi.org (see <a href="http://www.crossref.org/01company/pr/news080211.html">CrossRef Revises DOI Display Guidelines</a>), so the DOI would be displayed as http://dx.doi.org/10.1007/978-3-319-25010-6_12. But the DOI can also be displayed as http://doi.org/10.1007/978-3-319-25010-6_12 (i.e., without the "dx." prefix), hence we have multiple ways to write the same identifier. Any querying that depends on exact string matching of identifiers will fail to recognise these strings as being the same. One way to insulate ourselves against this is to use <strong>indirection</strong>, for example by using on URIs that don't change as a proxy for the identifiers. To illustrate, the <a href="http://identifiers.org">identifiers.org</a> service (<a href="http://dx.doi.org/10.1093/nar/gkr1097">Identifiers.org and MIRIAM Registry: community resources to provide persistent identification</a>) represents a DOI as <a href="http://identifiers.org/doi/10.1093/nar/gkr1097">http://identifiers.org/doi/10.1093/nar/gkr1097</a> which means we can ignore whether the DOI should be written as http://dx.doi.org or http:/doi.org.</p>
+
+<p>In the case of JSON-LD we can simplify further by representing identifiers as CURIEs, so that a DOI becomes "DOI:10.1093/nar/gkr1097". This reflects the long standing convention in bioinformatics of representing identifiers in the form <i>database_abbreviation</i>:<i>record_identifier</i> (see for example the <a href="http://lsrn.org">Life Science Resource Name Project</a>). By adopting this approach we keep identifiers human-readable, easy to index, and stable. For an example of this apporach see  <a href="https://github.com/prefixcommons/biocontext">BioContext: JSON-LD Contexts for Bioinformatics Data</a>.</p>
+
+
+
+<h3>Multiple identifiers</h3>
+<p>It has been said that there are only three numbers in computer science: 0, 1, and <i>n</i>, and this is true of identifiers. Typically an item either has no digital identifier, or it has many. Rarely are we fortunate to have a single, widely recognised identifier. This means that we will always be faced with having to map between identifiers for the "same" thing. This is a task that <a href="http://sameas.org">&lt;sameAs&gt;</a> attempts, and more specifically for the biodiversity domain, <a href="http://bioguid.org">BioGUID.org</a>.</p>
+
+<p>Multiple identifiers raise the question of how do we write queries that will function when not every relevant object will have the same identifier.</p>
+
+<p>At the same time, having multiple identifiers can be an opportunity to increase the amount of information in the knowledge graph. Projects such as <a href="http://www.wikidata.org">Wikidata</a> are a potential treasure trove of crosslinks to other identifiers for people, journals, etc.</p>
+
+<hr />
+<h2><a name="glue" />Cross linking datasets ("glue")</h2>
+<div class="tag">crosslinking</div>
+<p class="recommendation">Priority should be given to assembling data sets that crosslink different identifiers.</p>
+<p>Given that the knowledge graph requires connections between different entities (the edges connecting the vertices), in many ways the most important data sets are those that make these connections. Many efforts to move to machinable-readable data ignore this, as a consequence we have lots of data that cannot be easily connected to other data. Many data sets contain attributes of a single class of entity (e.g., a specimen or a publication), and if other entities are mentioned they are identified using local identifiers (e.g., local identifiers for authors).</p>
+
+<p>
+Hence we will need to create data sets that act as "glue" to cross link different datasets. For example, a taxonomic dataset should include bibliographic identifiers to link to the literature, not just simply include "dumb" text string citations. Many sequences in GenBank are associated with publications that aren't indexed by PubMed, and hence lack a bibliographic identifier (even if one exists). Adding these to the sequences will connect sequences to publications in the knowledge graph.
+</p>
+
+<hr />
+<h2><a name="reconciliation" />Reconciliation services (from strings to things)</h2>
+<div class="tag">identifiers</div>
+<div class="tag">reconciliation</div>
+<div class="definition">Reconciliation is associating an identifier for a thing with a text description of that thing.</div>
+
+<p class="recommendation">Services for mapping strings to things should adopt the Reconciliation Service API standard.</p>
+
+<p>Many entities are represented in databases by strings rather than identifiers, hence a key task in building the knowledge graph is to map these strings onto identifiers.</p>
+
+<p>The now defunct database <a href="https://en.wikipedia.org/wiki/Freebase">FreeBase</a> developed a standardised <a href="https://github.com/OpenRefine/OpenRefine/wiki/Reconciliation-Service-API">Reconciliation Service API</a> which is supported by the widely used tool <a href="http://openrefine.org">OpenRefine</a> (itself originally a product of the same company, Metaweb, that produced FreeBase, see <a href="https://en.wikipedia.org/wiki/OpenRefine">Wikipedia article on OpenRefine</a>). This API has also been adopted by <a href="https://tools.wmflabs.org/wikidata-reconcile/?">Wikidata</a>. For some examples of OpenRefine use see <a href="http://iphylo.blogspot.co.uk/2012/02/using-google-refine-and-taxonomic.html">Using Google Refine and taxonomic databases (EOL, NCBI, uBio, WORMS) to clean messy data</a> and <a href="http://iphylo.blogspot.co.uk/2013/04/reconciling-author-names-using-open.html">Reconciling author names using Open Refine and VIAF</a>.</p>
+
+<p>Services needed include (but need not be limited to):
+<ul>
+<li>Specimen code to GBIF occurrence URL</li>
+<li>Bibliographic citation to DOI</li>
+<li>Microcitation to DOI</li>
+<li>Person name to identifier</li>
+<li>Taxonomic name to identifier</li>
+<li>Geographic place name to latitude and longitude (<a href="https://en.wikipedia.org/wiki/Geocoding">geocoding</a>)</li>
+</ul>
+A number of these services exist, but mostly as proof-of-concept demos (see links above, and <a href="http://iphylo.blogspot.co.uk/2015/04/linking-specimen-codes-to-gbif.html">Linking specimen codes to GBIF</a>).
+</p>
+
+<h3>Examples</h3>
+
+<h4>Wikidata</h4> 
+<div class="definition">Wikidata is a database of entities in Wikipedia.</div>
+<p>Wikidata provides a tool to map strings to Wikidata items.</p>
+<input type="text" id="wikidata_reconcile_query" value="American Museum of Natural History" placeholder="e.g., American Museum of Natural History" size="60">
+			<button id="wikidata_reconcile_find" onclick="wikidata_reconcile();">Query</button>
+<div id="wikidata_reconcile_result" class="result"></div>
+
+<h4>CrossRef</h4>
+<div class="definition">CrossRef provides services for DOIs for academic articles and books.</div>
+<p>This is a wrapper around the CrossRef search API. Enter a bibliographic citation and it attempts to find the corresponding DOI.</p>
+<input type="text" id="crossref_reconcile_query" value="Romero et al. 2009. The hypogean fihes of China. Environmental Biology of Fishes 86:211-278" placeholder="e.g., Romero et al. 2009. The hypogean fihes of China. Environmental Biology of Fishes 86:211-278" size="60">
+			<button id="crossref_reconcile_find" onclick="crossref_reconcile();">Query</button>
+<div id="crossref_reconcile_result" class="result"></div>
+
+
+
+<div class="todo">Are there examples of (a) OpenRefine and geocoding, and (b) OpenRefine and qualified queries (i.e., using additional columns to constrain search)?</div>
+
+
+<hr />
+<h2><a name="knowledge graph" />The knowledge graph</h2>
+<div class="tag">knowledge graph</div>
+<p class="recommendation">Create a graph database for the knowledge graph. There can be multiple instances of knowledge graphs, but a single graph of global scope will have the greatest impact.</p>
+
+<p>There are several arguments for building a single, centralised knowledge graph.
+<ul>
+<li>Having data in one place makes discoverability easy (user only has to search in one place to find what they want.)</li>
+<li>As the graph gets bigger, simple text search becomes more useful. For example, CrossRef's database has grown to the point where simple text search for a bibliographic reference is more efficient that parsing the citation into component parts and using those to search the database.</li>
+<li>We can learn from the data. Tasks such as geocoding will become easier the more examples of geocoded data we have (a more impressive example is Google automating language translation because it had assembled a huge corpus of multilingual documents via its web crawling).</li>
+</ul>
+</p>
+
+
+<p></p>
+
+
+<hr />
+<h2><a name="implementation" />Implementation</h2>
+<div class="tag">implementation</div>
+<div class="tag">microservices</div>
+<div class="tag">wrappers</div>
+<p>Instead of building a monolithic system there is considerable scope for developing "microservices", that is each component required to construct the knowledge graph can be a standalone service that does one thing. If the inputs and outputs are well defined, this means we can easily distribute the task of building the infrastructure, as well as swap in and out alternative implementations of a specific service.</p>
+
+<h3>Identifier resolvers</h3>
+<div class="tag">resolver</div>
+<div class="tag">lsid</div>
+<div class="tag">doi</div>
+<div class="tag">url</div>
+<p>For every supported identifier type we need a resolver that can take the identifier and retrieve data. This means supporting LSIDs, DOIs, and URLs. Some resolvers will be generic, some will have to be programmed to a specific API.
+
+<h3>JSON-LD wrappers</h3>
+<div class="tag">json-ld</div>
+<p>Few, if any, biodiversity data providers serve data in JSON-LD. Until such time as JSON-LD support becomes widely adopted the obvious strategy is to provide wrappers for each provider, in much the same way that the <a http://bio2rdf.org">Bio2RDF</a> project wraps numerous bioinformatics sources to produce RDF (<a href="http://dx.doi.org/10.1016/j.jbi.2008.03.004">Bio2RDF: Towards a mashup to build bioinformatics knowledge systems</a>).</p>
+
+<p>For existing providers that serve RDF (such as databases with LSIDs) we can simply transform the RDF/XML to JSON-LD. For other sources we may need to do some additional work.</p>
+
+
+<h3>Live examples of wrappers</h3>
+
+<p>Pick an identifier to see a JSON-LD version of the corresponding data. This is "live".</p>
+
+<p>
+
+<select id="select_wrapper" onchange="show_wrapper(this);">
+<option value="" disabled selected>Select an identifier</option>
+<option value="occurrence:237056861">GBIF occurrence 237056861</option>
+<option value="HQ546849">GenBank HQ546849</option>
+<option value="PMID:948206">PubMed PMID:948206</option>
+<option value="BOLD:ASAND211-10">DNA barcode BOLD ASAND211-10</option>
+
+</select>
+<div id="wrapper_result" class="result"></div>
+</p>
+
+<h4>Notes on data models</h4>
+<p>The JSON-LD wrappers above use the following data models.</p>
+
+<div class="todo">Flesh this out and with more details and justify the models.</div>
+
+
+<h5>Publication</h5>
+<div id="publication_model"></div>
+
+<h5>Occurence</h5>
+<div id="occurrence_model"></div>
+
+<script>
+	var graph1 = 'graph G { "CreativeWork" -- "Person" [label="creator"]; "CreativeWork" -- "Journal" [label="isPartOf"]; }';
+      var g1 = Viz(graph1, "svg", "dot");
+     document.getElementById("publication_model").innerHTML = g1;
+
+	var graph2 = 'graph G { "Occurrence" -- "Sequence" [label="associatedSequences"]; "Occurrence" -- "Location" [label="locationID"]; "Occurrence" -- "Identification" [label="identificationID"]; "Occurrence" -- "Event" [label="eventID"]; "Occurrence" -- "ImageObject" [label="associatedMedia"]; "Occurrence" -- "CreativeWork" [label="associatedReferences"];}';
+      var g2 = Viz(graph2, "svg", "dot");
+     document.getElementById("occurrence_model").innerHTML = g2;
+     
+     
+</script>
+
+<h3>Crawler</h3>
+<div class="tag">crawler</div>
+<div class="tag">message queue</div>
+<p>For most objects the JSON-LD will contain identifiers to other, linked, objects. For example an article will link to a journal, an ORCID profile will links to articles, a DNA sequence will link to one or more publications and a specimen voucher. These will all need to be added to the knowledge graph. One approach is to have the resolvers put these additional identifiers into a queue of identifiers to resolve. We then have a process that pulls identifiers from that queue and resolves them. In order to avoid crawling the entire graph of data we could simply resolve each identifier in the queue without placing any linked identifiers on the queue. In other words, when resolving an identifier directly we get the entities that are one edge away in the graph and put these into the queue, but when we resolve identifiers in the queue we defer resolution of the additional identifiers until a user or process specifically asks for that identifier to be resolved. In a proof of concept tool we could implement this queue using semaphore functions (e.g., <a href="http://www.ebrueggeman.com/blog/creating-a-message-queue-in-php">Creating a Message Queue in PHP Without External Libraries</a>).
+
+<h3>Data import</h3>
+<div class="tag">darwin core archive</div>
+<div class="tag">tsv</div>
+<p>In addition to resolving individual identifiers, we need mechanisms to import data in bulk. The biodiversity community has settled on Darwin Core Archive as a standard data format, so we need a parser to convert Darwin Core into JSON-LD. Another obvious format is triples, which is effectively a three (or four if we include nquads) column table.</p>
+
+<p>Bulk data import also provides a mechanism to give credit to data providers if the data is, for example, published as a data paper or uploaded to a repository such as Zenodo.</p>
+
+<h3>Data bases</h3>
+<div class="tag">graph database</div>
+<div class="tag">document database</div>
+<div class="tag">hexastore</div>
+<div class="tag">CouchDB</div>
+
+
+<p>One obvious approach to building the knowledge graph is to use a triple store. This has the advantage of being the native database for triples, but it might not have all the functionality required.</p>
+
+<p>Graph databases, such as <strong>Neo4J</strong> are another option. These make modelling graphs straightforward (and fun), and support sophisticated queries. But it involves committing to a particular implementation. Other graph databases that could be explored include <a href="http://google-opensource.blogspot.co.uk/2014/06/cayley-graphs-in-go.html">Cayley</a>.</p>
+
+<p>JSON-based document stores such as <strong>CouchDB</strong> can store JSONB-LD natively, and can also do some graph-like queries. By storing {s, p, o}; triples in the six possible combinations ({s, p, o}, {s, o, p}, {p, s, o}, {p, s, o}, {o, s, p}, and {o, p, s}) it is possible to support graph queries. For a live demonstration and slideshow on hexastores see <a href="http://nodejsconfit.levelgraph.io/">How to Cook a Graph Database in a Night</a>, see also <a href="http://crubier.net/Hexastore/">hexastore</a>. </p>
+
+<p>Lastly, full-text search is also a very powerful tool, and search engines such as <strong>Elastic Search</strong> have powerful capabilities. Some products such as <strong>Cloudant</strong> combine CouchDB and Lucene to create fast, searchable document stores.</p>
+
+<p>It is likely that a number of complementary databases will be useful. We need to think beyond triple stores if we are to be able to support all the kinds of queries needed.</p>
+
+<div class="todo">Can we have one or more live examples of a central store here (maybe even just a Javascript store in this browser window)?</div>
+
+<hr />
+<h2><a name="applications" />Applications</h2>
+<div class="tag">applications</div>
+<div class="tag">implementation</div>
+<p class="recommendation">Applications to demonstrate the practical value of the knowledge graph.</p>
+
+<p>We need a set of applications to demonstrate the value of the knowledge graph, and also to help frame the kinds of queries we need to support. These applications should be simple, easy to use, and actually useful. Here are some possibilities.</p>
+
+
+<h3>Annotate this!</h3>
+<div class="tag">all identifiers</div>
+<div class="tag">data augmentation</div>
+<p>A visitor to any biodiversity data web page can discover further information by clicking on a bookmarklet which displays a popup window that augments the data on display. For example, a visitor to a GBIF occurrence page could see what papers cite that specimen, and the DNA sequences for which it is a voucher. This idea was sketched out in <a href="http://iphylo.blogspot.co.uk/2014/03/rethinking-annotating-biodiversity-data.html">Rethinking annotating biodiversity data</a>, and could also be implemented as a Chrome extension.</p>
+
+
+<h3>I am a taxonomist</h3>
+<div class="tag">orcid</div>
+<div class="tag">engagement</div>
+<p>A researcher with an ORCID uses that identifier to log into a web site that then shows the researcher what species they have published. This relies on links between ORCID for person, DOI for publication, and LSID for taxonomic name. Could be used to explore idea of experts being able to self identify their area of expertise, especially in the context of annotating and cleaning data. An expert becomes easy to recognise without them having to say "I am an expert".</p>
+
+<h3>iSpecies</h3>
+<div class="tag">all identifiers</div>
+<div class="tag">mashup</div>
+<p><a href="ispecies.org">iSpecies</a> is a simple mashup of different sources of information, such as GBIF, EOL, CrossRef, TreeBASE, etc. What happens when we extract the identifiers from these sources, augment them and use that information to generate a synthesis (rather than an aggregation)? For example, the same paper may appear in different data sources, there may be connections between specimens, sequences and papers that aren't uncovered by a simple mashup. Conceptually the goal would be to create a subgraph of the knowledge graph corresponding to the original search term (typically a species or genus name) and compare that with the simple mashup approach.</p>
+
+<h3>Collection impact metrics</h3>
+<div class="tag">doi</div>
+<div class="tag">gbif</div>
+<div class="tag">genbank</div>
+<div class="tag">impact</div>
+<p>If we can link specimens to outputs, such as publications and sequences, and link the specimens back to their host repository then we can compute measures of the "impact" of that collection.</p>
+
+<h3>How open is the data? Evaluating the Bouchout Declaration </h3>
+<div class="tag">bouchout</div>
+<p>The <a href="http://www.bouchoutdeclaration.org/declaration/">Bouchout Declaration</a> includes numerous signatories pledging to open their data, but we have no means of determining to what extent they have done so. By linking collections and journals to institutions we can ask questions such as "is this institution's data in GBIF?", and "are this institution's in-house journals open access?". </p>
+
+<h3>Annotating BLAST hits</h3>
+<div class="tag">blast</div>
+<p>A simple exploratory tool is to take genetic sequence and run the BLAST tool to locate similar sequences (for example (<a href="http://iphylo.org/~rpage/phyloinformatics/blast" target="_new">Phyloinformatics BLAST tools</a>). These sequence may be linked to literature and specimen vouchers, which could be used to enrich the results (e.g., by adding geographic localities to the sequences).</p>
+
+<!--
+<h2><a name="chapter" />Chapter</h2>
+<div class="tag">tag</div>
+<p></p>
+-->
+
+
+<h2>References</h2>
+
+<ul>
+<li>Belleau, F., Nolin, M.-A., Tourigny, N., Rigault, P., & Morissette, J. (2008). Bio2RDF: Towards a mashup to build bioinformatics knowledge systems. Journal of Biomedical Informatics, 41(5), 706–716. <a href="http://dx.doi.org/10.1016/j.jbi.2008.03.004">doi:10.1016/j.jbi.2008.03.004</a></li>
+
+<li>Juty, N., Le Novere, N., & Laibe, C. (2011). Identifiers.org and MIRIAM Registry: community resources to provide persistent identification. Nucleic Acids Research, 40(D1), D580–D586. <a href="http://dx.doi.org/10.1093/nar/gkr1097">doi:10.1093/nar/gkr1097</a></li>
+
+<li>Cynthia Sims Parr, Katja S Schulz, Jennifer Hammock, Nathan Wilson, Patrick Leary, Jeremy Rice, Robert J. Corrigan (2015). TraitBank: Practical semantics for organism attribute data. Semantic Web Journal <a href="http://www.semantic-web-journal.net/content/traitbank-practical-semantics-organism-attribute-data-2">http://www.semantic-web-journal.net/content/traitbank-practical-semantics-organism-attribute-data-2</a></li>
+
+<li>Szekely, P., Knoblock, C. A., Slepicka, J., Philpot, A., Singh, A., Yin, C., … Ferreira, L. (2015). Building and Using a Knowledge Graph to Combat Human Trafficking. The Semantic Web - ISWC 2015. Springer Science + Business Media. <a href="http://dx.doi.org/10.1007/978-3-319-25010-6_12">http://dx.doi.org/10.1007/978-3-319-25010-6_12</a></li>
+
+<li>Weiss, C., Karras, P., & Bernstein, A. (2008, August 1). Hexastore. Proc. VLDB Endow. VLDB Endowment. <a href="http://doi.org/10.14778/1453856.1453965">http://doi.org/10.14778/1453856.1453965</a> (<a href="http://www.vldb.org/pvldb/1/1453965.pdf">PDF here</a>)</li>
+
+<li>Wieczorek, J., Bloom, D., Guralnick, R., Blum, S., Döring, M., Giovanni, R., … Vieglais, D. (2012). Darwin Core: An Evolving Community-Developed Biodiversity Data Standard. PLoS ONE, 7(1), e29715. <a href="http://dx.doi.org/10.1371/journal.pone.0029715">doi:10.1371/journal.pone.0029715</a></li>
+
+
+</ul>
+
+
+
+</body>
+</html>

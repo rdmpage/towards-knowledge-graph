@@ -1,0 +1,31 @@
+8
+
+dir
+34
+https://rdmpage@bioguid.googlecode.com/svn/trunk/www/Net
+https://rdmpage@bioguid.googlecode.com/svn
+
+
+
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
+
+svn:special svn:externals svn:needs-lock
+
+DNS
+dir
+
+DNS.php
+file
+
+
+
+
+2009-04-08T20:14:53.000000Z
+36f7e4608a22b3dddc72c389ae071cc4
+2009-04-09T15:44:01.921400Z
+34
+rdmpage
+
