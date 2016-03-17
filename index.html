@@ -136,6 +136,7 @@
 <li><a href="#vocabularies">Vocabularies</a></li>
 <li><a href="#identifiers">Identifiers</a></li>
 <li><a href="#glue">Cross linking datasets ("glue")</a></li>
+<li><a href="#entityextraction">Entity extraction services</a></li>
 <li><a href="#reconciliation">Reconciliation services (from strings to things)</a></li>
 <li><a href="#knowledge graph">The knowledge graph</a></li>
 <li><a href="#implementation">Implementation</a></li>
@@ -302,6 +303,41 @@ jsonld.compact(doc1, context2, function(err, compacted) {
 <p>
 Hence we will need to create data sets that act as "glue" to cross link different datasets. For example, a taxonomic dataset should include bibliographic identifiers to link to the literature, not just simply include "dumb" text string citations. Many sequences in GenBank are associated with publications that aren't indexed by PubMed, and hence lack a bibliographic identifier (even if one exists). Adding these to the sequences will connect sequences to publications in the knowledge graph.
 </p>
+
+<hr />
+<h2><a name="entityextraction" />Entity extraction services</h2>
+<div class="tag">entities</div>
+<div class="tag">specimen codes</div>
+<div class="tag">taxonomic names</div>
+<div class="tag">localities</div>
+<div class="tag">citations</div>
+<div class="tag">GenBank accession numbers</div>
+<div class="definition">Entity extraction is locating text strings that correspond to entities such as taxa, people, localities, etc.</div>
+
+<p class="recommendation">Develop a standard API and response format for extracting entities from text.</p>
+
+<p>Text in scientific papers and databases often mention entities such as taxonomic names, specimens, localities, and data items such as DNA sequences. There are various tools for identifying taxonomic names in text (e.g., <a href="http://doi.org/10.1186/1471-2105-13-211">http://doi.org/10.1186/1471-2105-13-211</a> and <a href="http://gnrd.globalnames.org">Global Names Recognition and Discovery</a>.</p>
+
+<p>It would be desirable to have a suite of tools that can take text (in various forms, such as plaint text, XML, HTML, PDF) and return a list of possible entities with their location indicated in the text. This can be seen as part of the more general problem of annotating text, and hence formats such as that used by the now defunct <a href="https://github.com/readmill/API/wiki/Highlight-locators">Readmill</a> could be the basis of a common format.</p>
+
+<div class="result">
+<pre>
+{
+  position: 0.738,
+  pre: "i am the text just before the highlighted text",
+  mid: "i am the highlighted text",
+  post: "i am the text just after the highlighted text",
+  xpath: {
+    start: "//*[@class='starttag']",
+    end: "/*[@class='endtag']",
+  },
+  file_id: "chapter-2"
+}
+</pre>
+
+<p>Note the use of various methods to mark the location in the text (absolute position, position relative to surrounding text, and path to location document). We can use that information to "mark up" an entity in the text when it is displayed. Adopting a format that is compatible with annotation tools (such as <a href="http://hypothes.is">hypothes.is</a>) means we can view entity extraction as part of the more general annotation problem, and combine automated markup with human annotation. </p>
+
+</div>
 
 <hr />
 <h2><a name="reconciliation" />Reconciliation services (from strings to things)</h2>
@@ -508,6 +544,9 @@ A number of these services exist, but mostly as proof-of-concept demos (see link
 <h2>References</h2>
 
 <ul>
+
+<li>Akella, L., Norton, C. N., & Miller, H. (2012). NetiNeti: discovery of scientific names from text using machine learning methods. BMC Bioinformatics. Springer Science + Business Media. <a href="http://doi.org/10.1186/1471-2105-13-211">http://doi.org/10.1186/1471-2105-13-211</a></li>
+
 <li>Belleau, F., Nolin, M.-A., Tourigny, N., Rigault, P., & Morissette, J. (2008). Bio2RDF: Towards a mashup to build bioinformatics knowledge systems. Journal of Biomedical Informatics, 41(5), 706–716. <a href="http://dx.doi.org/10.1016/j.jbi.2008.03.004">doi:10.1016/j.jbi.2008.03.004</a></li>
 
 <li>Juty, N., Le Novere, N., & Laibe, C. (2011). Identifiers.org and MIRIAM Registry: community resources to provide persistent identification. Nucleic Acids Research, 40(D1), D580–D586. <a href="http://dx.doi.org/10.1093/nar/gkr1097">doi:10.1093/nar/gkr1097</a></li>
